@@ -1,7 +1,7 @@
-import { User } from "../models/user.model";
-import { apiError } from "../utils/apierror";
-import { apiResponse } from "../utils/apiresponse";
-import { asynchandler } from "../utils/asynchandler";
+import { User } from "../models/user.model.js";
+import { apiError } from "../utils/apiError.js";
+import { apiResponse } from "../utils/apiResponse.js";
+import { asynchandler } from "../utils/asynchandler.js";
 
 const generateAccessRefreshToken = async (userId) => {
   try {
@@ -179,4 +179,56 @@ const refreshAccesstoken = asynchandler(async (req, res) => {
       );
   } catch (error) {}
 });
-export { registerUser, loginUser, logoutUser, refreshAccesstoken };
+
+const changePassword = asynchandler(async (req, res) => {
+  const { oldpassword, newpassword } = req.body;
+  const user = await User.findById(req.user._id);
+  const isPasswordCorrect = await User.ispasswordcorrect(oldpassword);
+
+  if (!isPasswordCorrect) {
+    throw new apiError(400, "Invalid old password");
+  }
+
+  user.password = newpassword;
+  await user.save({ validateBeforeSave: false });
+
+  return res
+    .status(200)
+    .json(new apiresponse(200, {}, "password change successfully"));
+});
+
+const getcurrentuser = asynchandler(async (req, res) => {
+  return res
+    .status(200)
+    .json(new apiresponse(200), req.user, "user fetched successfully");
+});
+
+const updateAccountdetails = asynchandler(async (req, res) => {
+  const { email, fullName } = req.body;
+  if (!email || !fullName) {
+    throw new apiError(400, "All fields are required!!!");
+  }
+
+  const user = await User.findByIdAndUpdate(
+    req.user?._id,
+    {
+      $set: {
+        fullName: fullName,
+        email: email,
+      },
+    },
+    {
+      new: true,
+    },
+  ).select("-password");
+  return res
+    .status(200)
+    .json(new ApiResponse(200, user, "Account details updated successfully"));
+});
+export {
+  registerUser,
+  loginUser,
+  logoutUser,
+  refreshAccesstoken,
+  changePassword,
+};
