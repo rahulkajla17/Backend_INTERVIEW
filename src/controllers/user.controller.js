@@ -2,30 +2,34 @@ import { User } from "../models/user.model.js";
 import { apiError } from "../utils/apiError.js";
 import { apiResponse } from "../utils/apiResponse.js";
 import { asynchandler } from "../utils/asynchandler.js";
+import jwt from "jsonwebtoken";
 
 const generateAccessRefreshToken = async (userId) => {
   try {
-    const user = User.findById(userId);
+    const user = await User.findById(userId);
     const AccessToken = user.generateAccessToken();
     const RefreshToken = user.generateRefreshToken();
 
-    user.RefreshToken = RefreshToken;
-    await user.save({ validatebeforesave: false });
+    user.refreshtoken = RefreshToken;
+    await user.save({ validateBeforeSave: false });
     return { AccessToken, RefreshToken };
   } catch (error) {
     throw new apiError(
       400,
-      "something went wrong while generate the AccessToken and RefreshToken",
+      "something went wrong while generating the AccessToken and RefreshToken",
     );
   }
 };
+
 const registerUser = asynchandler(async (req, res) => {
-  const { fullName, username, email, password } = req.body;
+  const { fullName, username, email, password } = req.body || {};
 
   if (
-    [fullName, username, email, password].some((field) => field?.trim === "")
+    [fullName, username, email, password].some(
+      (field) => !field || field.trim() === "",
+    )
   ) {
-    throw new apiError(400, "all Fiels are required");
+    throw new apiError(400, "all fields are required to register");
   }
 
   const ExistedUser = await User.findOne({
@@ -37,7 +41,7 @@ const registerUser = asynchandler(async (req, res) => {
   }
 
   const user = await User.create({
-    username: username.lowercase(),
+    username: username.toLowerCase(),
     email,
     password,
     fullName,
@@ -57,7 +61,7 @@ const registerUser = asynchandler(async (req, res) => {
 });
 
 const loginUser = asynchandler(async (req, res) => {
-  const { email, username, password } = req.body;
+  const { email, username, password } = req.body || {};
   if (!email && !username) {
     throw new apiError(400, "email and username are required");
   }
@@ -80,7 +84,7 @@ const loginUser = asynchandler(async (req, res) => {
   );
 
   const loggedinuser = await User.findById(user._id).select(
-    "-password -RefreshToken",
+    "-password -refreshtoken",
   );
 
   const options = {
@@ -132,41 +136,40 @@ const logoutUser = asynchandler(async (req, res) => {
 
 const refreshAccesstoken = asynchandler(async (req, res) => {
   const incomingrefreshtoken =
-    req.body.refreshtoken || req.cookies.refreshtoken;
+    req.body?.refreshtoken || req.cookies?.refreshtoken;
 
   if (!incomingrefreshtoken) {
     throw new apiError(400, "refresh token required");
   }
 
-  const decodedtoken = jwt.verify(
-    incomingrefreshtoken,
-    process.env.REFRESH_TOKEN_SECRET,
-  );
-
   try {
+    const decodedtoken = jwt.verify(
+      incomingrefreshtoken,
+      process.env.REFRESH_TOKEN_SECRET,
+    );
+
     const user = await User.findById(decodedtoken?._id);
 
     if (!user) {
-      throw new apiError(401, " INvalid refresh token");
+      throw new apiError(401, "Invalid refresh token");
     }
 
     if (incomingrefreshtoken !== user?.refreshtoken) {
-      throw new apiError(401, "referesh token is used or expired");
+      throw new apiError(401, "refresh token is used or expired");
     }
+
+    const { RefreshToken: refreshtoken, AccessToken: newaccesstoken } =
+      await generateAccessRefreshToken(user._id);
 
     const options = {
       httpOnly: true,
       secure: true,
     };
 
-    const { refreshtoken, newaccesstoken } = await generateAccessRefreshToken(
-      user._id,
-    );
-
     return res
       .status(200)
-      .cookie("accesstoken", newaccesstoken)
-      .cookie("refreshtoken", refreshtoken)
+      .cookie("accesstoken", newaccesstoken, options)
+      .cookie("refreshtoken", refreshtoken, options)
       .json(
         new apiResponse(
           200,
@@ -177,13 +180,15 @@ const refreshAccesstoken = asynchandler(async (req, res) => {
           "access token refreshed",
         ),
       );
-  } catch (error) {}
+  } catch (error) {
+    throw new apiError(401, error?.message || "Invalid refresh token");
+  }
 });
 
 const changePassword = asynchandler(async (req, res) => {
-  const { oldpassword, newpassword } = req.body;
+  const { oldpassword, newpassword } = req.body || {};
   const user = await User.findById(req.user._id);
-  const isPasswordCorrect = await User.ispasswordcorrect(oldpassword);
+  const isPasswordCorrect = await user.ispasswordcorrect(oldpassword);
 
   if (!isPasswordCorrect) {
     throw new apiError(400, "Invalid old password");
@@ -194,17 +199,17 @@ const changePassword = asynchandler(async (req, res) => {
 
   return res
     .status(200)
-    .json(new apiresponse(200, {}, "password change successfully"));
+    .json(new apiResponse(200, {}, "password change successfully"));
 });
 
 const getcurrentuser = asynchandler(async (req, res) => {
   return res
     .status(200)
-    .json(new apiresponse(200), req.user, "user fetched successfully");
+    .json(new apiResponse(200, req.user, "user fetched successfully"));
 });
 
 const updateAccountdetails = asynchandler(async (req, res) => {
-  const { email, fullName } = req.body;
+  const { email, fullName } = req.body || {};
   if (!email || !fullName) {
     throw new apiError(400, "All fields are required!!!");
   }
@@ -223,12 +228,15 @@ const updateAccountdetails = asynchandler(async (req, res) => {
   ).select("-password");
   return res
     .status(200)
-    .json(new ApiResponse(200, user, "Account details updated successfully"));
+    .json(new apiResponse(200, user, "Account details updated successfully"));
 });
+
 export {
   registerUser,
   loginUser,
   logoutUser,
   refreshAccesstoken,
   changePassword,
+  getcurrentuser,
+  updateAccountdetails,
 };
