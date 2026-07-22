@@ -1,14 +1,10 @@
+import "dotenv/config";
 import { application } from "express";
 import { app } from "./app.js";
-import dotenv from "dotenv";
 import ConnectDB from "./db/index.js";
 
 import dns from "node:dns/promises";
 dns.setServers(["8.8.8.8", "1.1.1.1"]);
-
-dotenv.config({
-  path: "./.env",
-});
 
 ConnectDB()
   .then(() => {
