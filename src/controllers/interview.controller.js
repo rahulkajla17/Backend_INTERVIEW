@@ -3,10 +3,17 @@ import { InterviewReportModel } from "../models/InterviewReport.model.js";
 import { asynchandler } from "../utils/asynchandler.js";
 import { generateInterviewReport } from "../services/ai.service.js";
 
+/**
+ * @desc Generate an interview report using AI
+ * @route POST /api/interview/generate
+ * @access Private
+ */
 const generateInterviewReportController = asynchandler(async (req, res) => {
   const resumeFile = req.file;
   if (!resumeFile) {
-    return res.status(400).json({ status: "error", message: "Resume file is required" });
+    return res
+      .status(400)
+      .json({ status: "error", message: "Resume file is required" });
   }
 
   const parser = new PDFParse({ data: new Uint8Array(resumeFile.buffer) });
@@ -36,4 +43,44 @@ const generateInterviewReportController = asynchandler(async (req, res) => {
   });
 });
 
-export { generateInterviewReportController };
+/**
+ * @desc Get an interview report by ID
+ * @route GET /api/interview/:interrviewId
+ * @access Private
+ */
+async function getinterviewReportByIdController(req, res) {
+  const { interrviewId } = req.params;
+
+  const interviewReport = await InterviewReportModel.findById(interrviewId);
+  if (!interviewReport) {
+    return res
+      .status(404)
+      .json({ status: "error", message: "Interview report not found" });
+  }
+  res.status(200).json({
+    status: "success",
+    data: interviewReport,
+  });
+}
+
+/** */
+
+async function getAllInterviewReportsController(req, res) {
+  const interviewReports = await InterviewReportModel.find({
+    user: req.user._id,
+  })
+    .sort({ createdAt: -1 })
+    .select(
+      "-resumeText -selfDescription -jobDescriptionSchema -technicalQuestions -behavioralQuestions -skillGaps -preparationPlan -__v",
+    );
+
+  res.status(200).json({
+    status: "success",
+    data: interviewReports,
+  });
+}
+export {
+  generateInterviewReportController,
+  getinterviewReportByIdController,
+  getAllInterviewReportsController,
+};
