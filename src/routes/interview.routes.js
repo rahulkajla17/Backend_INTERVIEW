@@ -16,7 +16,7 @@ const interviewRouter = express.Router();
  */
 
 interviewRouter.post(
-  "/",
+  "/interview",
   jwtverify,
   upload.single("resumeFile"),
   generateInterviewReportController,
